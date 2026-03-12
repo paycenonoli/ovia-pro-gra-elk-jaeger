@@ -1,0 +1,238 @@
+So in summary, give me the files for the lab: the application code with the three pillars and the docker-compose file. That is...all I need to now start the lab.
+
+You’re exactly right to want a clean starting point. Below is a minimal but complete observability lab that includes:
+
+Metrics → Prometheus
+
+Logs → Elasticsearch + Kibana
+
+Traces → Jaeger
+
+Dashboards → Grafana
+
+This is all you need to start the lab.
+
+Folder Structure
+
+Create a folder like this:
+
+observability-lab
+ ├── docker-compose.yml
+ ├── prometheus.yml
+ └── app
+     ├── Dockerfile
+     ├── package.json
+     ├── app.js
+     ├── metrics.js
+     └── logger.js
+1. Application Code
+app/app.js
+const express = require("express")
+
+const { client, httpRequests } = require("./metrics")
+const logger = require("./logger")
+
+const app = express()
+
+app.get("/", (req,res)=>{
+
+  httpRequests.labels("GET","/","200").inc()
+
+  logger.info("Home endpoint accessed")
+
+  res.send("Hello Observability")
+})
+
+app.get("/error",(req,res)=>{
+
+  httpRequests.labels("GET","/error","500").inc()
+
+  logger.error("Simulated application error")
+
+  res.status(500).send("Application failure")
+})
+
+app.get("/metrics", async (req,res)=>{
+  res.set("Content-Type",client.register.contentType)
+  res.end(await client.register.metrics())
+})
+
+app.listen(3000,()=>{
+  logger.info("Application started on port 3000")
+})
+app/metrics.js
+const client = require("prom-client")
+
+client.collectDefaultMetrics()
+
+const httpRequests = new client.Counter({
+  name: "http_requests_total",
+  help: "Total HTTP requests",
+  labelNames: ["method","route","status"]
+})
+
+module.exports = {
+  client,
+  httpRequests
+}
+app/logger.js
+const winston = require("winston")
+
+const logger = winston.createLogger({
+  level: "info",
+  format: winston.format.json(),
+  transports: [
+    new winston.transports.Console()
+  ]
+})
+
+module.exports = logger
+app/package.json
+{
+  "name": "observability-demo",
+  "version": "1.0.0",
+  "main": "app.js",
+  "dependencies": {
+    "express": "^4.18.2",
+    "prom-client": "^15.0.0",
+    "winston": "^3.10.0"
+  }
+}
+app/Dockerfile
+FROM node:20
+
+WORKDIR /app
+
+COPY package.json .
+RUN npm install
+
+COPY . .
+
+EXPOSE 3000
+
+CMD ["node","app.js"]
+2. Prometheus Configuration
+
+Create:
+
+prometheus.yml
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+
+  - job_name: "node-app"
+
+    static_configs:
+      - targets: ["node-app:3000"]
+
+Prometheus will scrape:
+
+http://node-app:3000/metrics
+3. Docker Compose Stack
+docker-compose.yml
+version: "3"
+
+services:
+
+  node-app:
+    build: ./app
+    ports:
+      - "3000:3000"
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3001:3000"
+
+  elasticsearch:
+    image: elasticsearch:8.12.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+
+  kibana:
+    image: kibana:8.12.0
+    ports:
+      - "5601:5601"
+
+  jaeger:
+    image: jaegertracing/all-in-one
+    ports:
+      - "16686:16686"
+4. Start the Lab
+
+From the root folder:
+
+docker compose up --build
+
+Check containers:
+
+docker ps
+5. Access the Tools
+
+Application
+
+http://localhost:3000
+
+Metrics endpoint
+
+http://localhost:3000/metrics
+
+Prometheus
+
+http://localhost:9090
+
+Grafana
+
+http://localhost:3001
+
+Default login
+
+admin
+admin
+
+Kibana
+
+http://localhost:5601
+
+Jaeger
+
+http://localhost:16686
+6. Generate Traffic
+
+Run requests:
+
+curl localhost:3000
+
+Generate an error:
+
+curl localhost:3000/error
+7. What You Will Observe
+
+Metrics appear in Prometheus:
+
+http_requests_total
+
+Logs appear in container output and can be ingested by Elasticsearch.
+
+Example log:
+
+{"level":"error","message":"Simulated application error"}
+
+You now have a working observability lab.
+
+💡 Once you run this, the next powerful step would be to simulate a real production incident and investigate it step-by-step across:
+
+Grafana → Kibana → Jaeger
+
+That exercise is exactly how DevOps engineers build strong troubleshooting instincts.
