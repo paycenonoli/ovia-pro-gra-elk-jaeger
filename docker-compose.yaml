@@ -1,0 +1,75 @@
+version: "3"
+
+
+
+services:
+
+
+
+  node-app:
+
+    build: ./app
+
+    ports:
+
+      - "3000:3000"
+
+
+
+  prometheus:
+
+    image: prom/prometheus
+
+    volumes:
+
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+    ports:
+
+      - "9090:9090"
+
+
+
+  grafana:
+
+    image: grafana/grafana
+
+    ports:
+
+      - "3001:3000"
+
+
+
+  elasticsearch:
+
+    image: elasticsearch:8.12.0
+
+    environment:
+
+      - discovery.type=single-node
+
+      - xpack.security.enabled=false
+
+    ports:
+
+      - "9200:9200"
+
+
+
+  kibana:
+
+    image: kibana:8.12.0
+
+    ports:
+
+      - "5601:5601"
+
+
+
+  jaeger:
+
+    image: jaegertracing/all-in-one
+
+    ports:
+
+      - "16686:16686"
